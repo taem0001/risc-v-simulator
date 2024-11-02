@@ -9,9 +9,8 @@ int simulation(char *testfile, int *registers) {
   int pc = 0;
 
   // Get instructions from file
-  int size = get_program_size(testfile);
-  program = (int *)malloc(size * sizeof(int));
-  read_input_bin(program, testfile);
+  int size;
+  program = read_input(testfile, &size);
 
   bool pc_modified;
   int instr;
@@ -24,6 +23,7 @@ int simulation(char *testfile, int *registers) {
   int imm;
   int imm1;
   int imm2;
+  int val;
 
   while ((pc >> 2) < size) {
     pc_modified = false;
@@ -41,40 +41,43 @@ int simulation(char *testfile, int *registers) {
 
       switch (f3 | f7) {
       case 0x0:
-        registers[rd] = registers[rs1] + registers[rs2];
+        val = registers[rs1] + registers[rs2];
         break;
       case 0x20:
-        registers[rd] = registers[rs1] - registers[rs2];
+        val = registers[rs1] - registers[rs2];
         break;
       case 0x4:
-        registers[rd] = registers[rs1] ^ registers[rs2];
+        val = registers[rs1] ^ registers[rs2];
         break;
       case 0x6:
-        registers[rd] = registers[rs1] | registers[rs2];
+        val = registers[rs1] | registers[rs2];
         break;
       case 0x7:
-        registers[rd] = registers[rs1] & registers[rs2];
+        val = registers[rs1] & registers[rs2];
         break;
       case 0x1:
-        registers[rd] = registers[rs1] << registers[rs2];
+        val = registers[rs1] << registers[rs2];
         break;
       case 0x5:
-        registers[rd] = shift_right_logical(registers[rs1], registers[rs2]);
+        val = (unsigned int)registers[rs1] >> registers[rs2];
         break;
       case 0x25:
-        registers[rd] = registers[rs1] >> registers[rs2];
+        val = registers[rs1] >> registers[rs2];
         break;
       case 0x2:
-        registers[rd] = (registers[rs1] < registers[rs2]) ? 1 : 0;
+        val = (registers[rs1] < registers[rs2]) ? 1 : 0;
         break;
       case 0x3:
-        registers[rd] = set_less_than_unsigned(registers[rs1], registers[rs2]);
+        val = ((unsigned int)registers[rs1] < (unsigned int)registers[rs2]) ? 1
+                                                                            : 0;
         break;
       default:
         printf("No instruction has the following funct3: %x and funct7: %x.\n ",
                f3, f7);
         break;
       }
+
+      write_register(registers, rd, val);
       break;
     // Opcode 0010011
     case 0x13:
@@ -85,36 +88,35 @@ int simulation(char *testfile, int *registers) {
 
       switch (f3) {
       case 0x0:
-        registers[rd] = registers[rs1] + imm;
+        val = registers[rs1] + imm;
         break;
       case 0x4:
-        registers[rd] = registers[rs1] ^ imm;
+        val = registers[rs1] ^ imm;
         break;
       case 0x6:
-        registers[rd] = registers[rs1] | imm;
+        val = registers[rs1] | imm;
         break;
       case 0x7:
-        registers[rd] = registers[rs1] & imm;
+        val = registers[rs1] & imm;
         break;
       case 0x1:
         if (((imm >> 5) & 0x7f) == 0x0) {
-          registers[rd] = registers[rs1] << (imm & 0x1f);
+          val = registers[rs1] << (imm & 0x1f);
         }
         break;
       case 0x5:
         if (((imm >> 5) & 0x7f) == 0x0) {
-          registers[rd] = shift_right_logical(registers[rs1], imm & 0x1f);
+          val = (unsigned int)registers[rs1] >> (imm & 0x1f);
         }
         if (((imm >> 5) & 0x7f) == 0x20) {
-          registers[rd] = registers[rs1] >> (imm & 0x1f);
+          val = registers[rs1] >> (imm & 0x1f);
         }
         break;
       case 0x2:
-        registers[rd] = (registers[rs1] < imm) ? 1 : 0;
+        val = (registers[rs1] < imm) ? 1 : 0;
         break;
       case 0x3:
-        registers[rd] =
-            ((unsigned int)registers[rs1] < (unsigned int)imm) ? 1 : 0;
+        val = ((unsigned int)registers[rs1] < (unsigned int)imm) ? 1 : 0;
         break;
       default:
         printf(
@@ -122,6 +124,8 @@ int simulation(char *testfile, int *registers) {
             f3, imm & 0x7f0);
         break;
       }
+
+      write_register(registers, rd, val);
       break;
     // Opcode 0000011
     case 0x3:
@@ -136,26 +140,27 @@ int simulation(char *testfile, int *registers) {
       int addr = registers[rs1] + imm;
       switch (f3) {
       case 0x0:
-        registers[rd] = (signed char)memory[addr];
+        val = (signed char)memory[addr];
         break;
       case 0x1:
-        registers[rd] = (signed short)((memory[addr + 1] << 8) | memory[addr]);
+        val = (signed short)((memory[addr + 1] << 8) | memory[addr]);
         break;
       case 0x2:
-        registers[rd] =
-            (signed int)((memory[addr + 3] << 24) | (memory[addr + 2] << 16) |
-                         (memory[addr + 1] << 8) | memory[addr]);
+        val = (signed int)((memory[addr + 3] << 24) | (memory[addr + 2] << 16) |
+                           (memory[addr + 1] << 8) | memory[addr]);
         break;
       case 0x4:
-        registers[rd] = memory[addr];
+        val = memory[addr];
         break;
       case 0x5:
-        registers[rd] = (memory[addr + 1] << 8) | memory[addr];
+        val = (memory[addr + 1] << 8) | memory[addr];
         break;
       default:
         printf("Unsupported load funct3: %#x.\n", f3);
         break;
       }
+
+      write_register(registers, rd, val);
       break;
     // Opcode 0100011
     case 0x23:
@@ -235,7 +240,7 @@ int simulation(char *testfile, int *registers) {
       rd = (instr >> 7) & 0x1f;
       imm = assemble_jump_offset(instr);
 
-      registers[rd] = pc + 4;
+      write_register(registers, rd, pc + 4);
       pc += imm;
       pc_modified = true;
 
@@ -248,7 +253,7 @@ int simulation(char *testfile, int *registers) {
       imm = instr >> 20;
 
       if (f3 == 0x0) {
-        registers[rd] = pc + 4;
+        write_register(registers, rd, pc + 4);
         pc = (registers[rs1] + imm);
         pc_modified = true;
       }
@@ -258,15 +263,16 @@ int simulation(char *testfile, int *registers) {
       rd = (instr >> 7) & 0x1f;
       imm = instr >> 12;
 
-      registers[rd] = imm << 12;
+      write_register(registers, rd, imm << 12);
 
       break;
     // Opcode 0010111
     case 0x17:
       rd = (instr >> 7) & 0x1f;
       imm = instr >> 12;
+      val = pc + (imm << 12);
 
-      registers[rd] = pc + (imm << 12);
+      write_register(registers, rd, val);
 
       break;
     // Opcode 1110011

@@ -4,62 +4,46 @@
 #include <stdlib.h>
 #include <string.h>
 
-int get_program_size(const char *testfile) {
+int *read_input(const char *testfile, int *s) {
   FILE *fptr;
   char filepath[300];
 
 #ifdef _WIN32
-  sprintf(filepath, "C:/Users/btaem/Desktop/Programmering/riscv/%s.bin",
-          testfile);
+  sprintf(filepath, WIN_INSTRUCTION_TEST, testfile);
 #else
-  sprintf(filepath, "/mnt/c/Users/btaem/Desktop/Programmering/riscv/%s.bin",
-          testfile);
+  sprintf(filepath, LIN_INSTRUCTION_TEST, testfile);
 #endif
 
   fptr = fopen(filepath, "rb");
 
   if (fptr == NULL) {
     printf("Error opening file!\n");
-
     exit(1);
   }
 
   fseek(fptr, 0, SEEK_END);
   int filesize = ftell(fptr);
   int size = filesize / sizeof(int);
-  fclose(fptr);
 
-  return size;
-}
+  rewind(fptr);
+  int *program = (int *)malloc(size * sizeof(int));
 
-void read_input_bin(int *program, const char *testfile) {
-  FILE *fptr;
-  char filepath[300];
-
-#ifdef _WIN32
-  sprintf(filepath, "C:/Users/btaem/Desktop/Programmering/riscv/%s.bin",
-          testfile);
-#else
-  sprintf(filepath, "/mnt/c/Users/btaem/Desktop/Programmering/riscv/%s.bin",
-          testfile);
-#endif
-
-  fptr = fopen(filepath, "rb");
-
-  if (fptr == NULL) {
-    printf("Error opening file!\n");
-
+  if (program == NULL) {
+    printf("Error allocating memory!\n");
     exit(1);
   }
 
   int number;
   int i = 0;
   while (fread(&number, sizeof(int), 1, fptr) == 1) {
-    *(program + i) = number;
+    program[i] = number;
     i++;
   }
 
   fclose(fptr);
+
+  *s = size;
+  return program;
 }
 
 void write_output(int *registers) {
@@ -128,8 +112,8 @@ int assemble_store_offset(int instr) {
   return imm;
 }
 
-int shift_right_logical(int rs1, int rs2) { return (unsigned int)rs1 >> rs2; }
-
-int set_less_than_unsigned(int rs1, int rs2) {
-  return ((unsigned int)rs1 < (unsigned int)rs2) ? 1 : 0;
+void write_register(int *registers, int i, int val) {
+  if (i != 0) {
+    registers[i] = val;
+  }
 }
